@@ -12,27 +12,33 @@ class Solution:
         self.graph = graph
         self.info = info
 
-    def score(self):
-        pass
+    def score(self,node):
+        return (0,node)
 
     def output_paths(self):
         """
         This method must be filled in by you. You may add other methods and subclasses as you see fit,
         but they must remain within the Solution class.
         """
-        connecteced_component = set(self.isp)
+        connecteced_component = set([self.isp])
 
-        possibleNext = self.graph[self.isp]
+        possibleNext = set(self.graph[self.isp])
+        
+        print(f"len of pos next is {len(self.graph)}")
 
-        childScores = [ self.score(child) for child in possibleNext ]
+        while(len(possibleNext)):
 
-        childScores.sort(reverse = True)
+            childScores = sorted(possibleNext, reverse= True, key=lambda x: self.score(x))
 
-        connecteced_component.add(childScores[0])
+            connecteced_component.add(childScores[0])
 
-        possibleNext.remove(childScores[0])
+            possibleNext.remove(childScores[0])
 
-        possibleNext.update(childScores[0])
+            possibleNext.update(self.graph[childScores[0]])
+
+            possibleNext.difference_update(connecteced_component)  #this sucks, we can do better but we lazy rn
+
+
         
 
 
