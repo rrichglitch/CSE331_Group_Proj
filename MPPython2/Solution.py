@@ -16,8 +16,8 @@ class Solution:
         self.MST = None 
         
 
-        def will_pay(self,node):
-            return 1
+    def will_pay(self,node):
+        return 1
 
     def local_bfs_path(self, graph, isp, list_clients):
 
@@ -47,14 +47,8 @@ class Solution:
         return paths
     
 
-
-
-
-    
-
-         
-
-    def score(self, node, path_bandwidth):
+    def score(self, node, path_bandwidth, x):
+        return 0
         if scores[node] >= 0:
             return scores[node]
 
@@ -86,13 +80,6 @@ class Solution:
         
 
 
-        
-            
-            
-       
-            
-
-
     def output_paths(self):
         """
         This method must be filled in by you. You may add other methods and subclasses as you see fit,
@@ -108,15 +95,15 @@ class Solution:
 
         while(len(possibleNext)):
 
-            childScores = sorted(possibleNext, reverse= True, key=lambda x: self.score(x,path_bandwidth,connecteced_component))
+            childScores = sorted(possibleNext, reverse= True, key=lambda x: self.score(x,path_bandwidth,self.connecteced_component))
 
-            connecteced_component.add(childScores[0])
+            self.connecteced_component.add(childScores[0])
 
             possibleNext.remove(childScores[0])
 
             possibleNext.update(self.graph[childScores[0]])
 
-            possibleNext.difference_update(connecteced_component)  #this sucks, we can do better but we lazy rn        
+            possibleNext.difference_update(self.connecteced_component)  #this sucks, we can do better but we lazy rn        
 
 
         paths, bandwidths, priorities = {}, {}, {}
