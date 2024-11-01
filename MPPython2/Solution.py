@@ -87,6 +87,8 @@ class Solution:
         """
         self.connecteced_component = [0]*len(self.graph)
 
+        self.connecteced_component = set()
+
         possibleNext = set(self.graph[self.isp])
         
         print(f"len of pos next is {len(self.graph)}")
