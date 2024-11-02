@@ -15,12 +15,10 @@ class LinkedList:
         self.tail.prev = self.head
 
         if data:
-            trav = self.head
             for item in data:
                 self.append(item)
 
     def append(self, id):
-
         node = Node(id)
         node.next = self.tail
         node.prev = self.tail.prev
@@ -30,16 +28,18 @@ class LinkedList:
         self.size += 1
 
     def remove(self, id):
-
-        trav = self.head
-        while trav != None:
-            trav = trav.next
+        trav = self.head.next
+        # print(f"removing from {self.size}")
+        while trav is not None and trav.id is not None:
             if trav.id == id:
                 trav.prev.next = trav.next
                 trav.next.prev = trav.prev
                 del trav
                 self.size -= 1
                 return True
+
+            trav = trav.next
+
         return False
 
     def size(self):
