@@ -11,41 +11,16 @@ class Solution:
         self.isp = isp
         self.graph = graph
         self.info = info
-        self.scores = [-1]*len(self.graph)
-        self.bandwidths = [-1]*len(self.graph)
         self.node2downStream = [ set() for i in range(len(self.graph)) ]
-        self.best_delays = None
-        self.is_client = [False]*len(self.graph)
-        for c in self.info['list_clients']:
-            self.is_client[c] = True
-        delay_srcs = [ [set()] for i in range(len(self.graph)) ]
+        self.current_path_acceptable = [-1]*len(self.graph)
+        # self.is_client = [False]*len(self.graph)
+        # for c in self.info['list_clients']:
+        #     self.is_client[c] = True
 
-    def local_bfs_path(self, graph, isp, list_clients):
-        paths = {}
-
-        graph_size = len(graph)
-        priors = [-1]*graph_size
-        search_queue = deque()
-        search_queue.append(isp)
-
-        while search_queue:
-            node = search_queue.popleft()
-            for neighbor in graph[node]:
-                if (priors[neighbor] == -1 and neighbor != isp):
-                    priors[neighbor] = node
-                    search_queue.append(neighbor)
-
-        for client in list_clients:
-            path = []
-            current_node = client
-            while (current_node != -1):
-                path.append(current_node)
-                current_node = priors[current_node]
-            path = path[::-1]
-            paths[client] = path
-
-        return paths
-
+        # TUNE THIS MAGIC NUMBER [0,1]:
+        # higher means faster; at 0 total algo time is O(n^3) at 1 its O(n^2)
+        # the lower this is, the more precisely the graph is formation is guided by score_path
+        self.top_x_percent = .8
 
     def extra_path_delay(self,node): # O(1)
         return len(self.node2downStream[node])//self.info["bandwidths"][node]
@@ -88,41 +63,60 @@ class Solution:
             grump_paths[grump] = path
 
         return grump_paths
-        
 
-    
-    def check_path_acceptable(self,path): # O(n)
+    # This gives a heuristic score based on pmt, path_len, delay, and acceptability   O(n)
+    def score_current_path(self,path): # call only on client paths
+        node = path[len(path)-1]
+
+        base_delay = len(self.short_paths[node])-1
         extra_delay = max([ self.extra_path_delay(path[i]) for i in range(len(path)-1) ])
-        base_delay = len(self.short_paths[path[len(path)-1]])-1
-        return (extra_delay+base_delay) <= (base_delay * self.info["alphas"].get(path[len(path)-1],9999))
+        cur_delay = base_delay+extra_delay
+        self.current_path_acceptable[node] = cur_delay <= (base_delay * self.info["alphas"][node])
 
+        money = self.info["payments"][node] * self.current_path_acceptable[node]
 
-    def score_path(self,path):
-        return self.info["payments"][path[len(path)-1]]/(len(path)-1) # combined pmt and path len scoring
+        return money/cur_delay
+        
+    # call only on client paths      O(n)
+    def check_path_acceptable(self,path):
+        node = path[len(path)-1]
 
+        if self.current_path_acceptable[node] >= 0:
+            return self.current_path_acceptable[node] # any new paths will already be cached during scoring
 
-    # packets dequeue for closer nodes first
+        base_delay = len(self.short_paths[node])-1
+        extra_delay = max([ self.extra_path_delay(path[i]) for i in range(len(path)-1) ])
+
+        return (base_delay+extra_delay) <= (base_delay * self.info["alphas"][node])
+
 
     # to begin we run our MST algo
     # next we iterate through the paths created by the MST and check for bandwidth delays
-    # we sort our nodes which r unhappy with bandwidth delay by pmt
-    # find a path the node is happy with foreach
+    # we sort our nodes which r unhappy with bandwidth delay by pmt and/or path len
+    # find a new short path for unhappy nodes given the current graph (dijkstra) 
     def improve_MST(self):
         paths = {}
-        # bfs is run on initialization to give us MST
-        self.short_paths = self.local_bfs_path(self.graph, self.isp, self.info["list_clients"])
-        new_paths = self.short_paths.copy()
-        # print(self.short_paths)
 
-        # paths = self.dijkstras(self.info["list_clients"])
+        first = True
+        last_useful = False
+        unhappy = self.info["list_clients"]
+        last_unhappy_cnt = len(unhappy)+1
 
-        last_unhappy_cnt = -1
-        while True:
+        while len(unhappy) and (len(unhappy) < last_unhappy_cnt or last_useful): # exit loop if we got everyone or we cant get anymore
+            last_unhappy_cnt = len(unhappy)
+            last_useful = len(unhappy) < last_unhappy_cnt # comment this out to save 1 iteration. leave in to maybe get a bit more revenue
+
+            # run dijkstras to find the shortest known paths for our grumps with the current knowledge of delays
+            new_paths = self.dijkstras(unhappy)
+            if first: # on the first run, since none of the node2downStream use for weighting is filled, dijkstra is simply BFS yielding MST
+                self.short_paths = new_paths
+                first = False
+
             # add in top x% of paths sorted by payment or sorted by path_len or both
-            new_paths = sorted(new_paths.values(), reverse=True, key=self.score_path)
-            size = len(new_paths)
-            for i in range(min(size,int(size*.85)+1)):
-                path = new_paths[i]
+            sorted_new_paths = sorted(new_paths.values(), reverse=True, key=self.score_current_path) # O(n^2)
+            new_cnt = len(new_paths)
+            for i in range(min(new_cnt,int(new_cnt*self.top_x_percent)+1)): # tune this magic top_x_percent!
+                path = sorted_new_paths[i]
                 node = path[len(path)-1]
                 paths[node] = path
                 for i in range(len(path)-1):
@@ -131,23 +125,17 @@ class Solution:
             unhappy = []
             for c in self.info["list_clients"]:
                 if c not in paths: unhappy.append(c)
-                elif not self.check_path_acceptable(paths[c]): # O(n^2) total
-                    unhappy.append(c)
-                    # as we find unhappy clients, pull them from their current path
-                    for upstream in paths[c]: # O(n^2) total
-                        self.node2downStream[upstream].discard(c)
-
-            if not len(unhappy) or last_unhappy_cnt == len(unhappy): break # exit loop if we got everyone or we cant get anymore
-
-            last_unhappy_cnt = len(unhappy)
-
-            # now run dijkstras to find the shortest known paths for our grumps with the knowledge of current delays
-            new_paths = self.dijkstras(unhappy)
-            # print(new_paths4unhappy)
+                else:
+                    if c not in new_paths: self.current_path_acceptable[c] = -1 # mark old paths for rechecking delay
+                    if not self.check_path_acceptable(paths[c]): # O(n^2)
+                        unhappy.append(c)
+                        # as we find unhappy clients, pull them from their current path
+                        for upstream in paths[c]: # O(n^2)
+                            self.node2downStream[upstream].discard(c)
 
         # print(paths)
         for c in self.info["list_clients"]:
-            paths.setdefault(c,[self.isp,c])
+            paths.setdefault(c,[self.isp,c]) # add in default paths for the shitters that didnt make the cut
 
         return paths
 
@@ -157,3 +145,5 @@ class Solution:
         but they must remain within the Solution class.
         """
         return self.improve_MST(), {}, {}
+
+    # the simulator dequeues packets for closer nodes first
