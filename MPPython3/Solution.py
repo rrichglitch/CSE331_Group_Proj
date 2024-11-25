@@ -117,7 +117,7 @@ class Solution:
 
     
 
-    # Update delays and acceptability/compliance for given clients
+    # Update delays and acceptability for given clients
     def update_delays(self, clients):
         for c in clients:
             path = self.paths[c]
@@ -129,7 +129,7 @@ class Solution:
             self.current_path_acceptable[c] = cur_delay <= (base_delay * self.info["alphas"][c])
 
             
-            self.current_path_compliant[c] = cur_delay <= (self.info["betas"][c] * base_delay)
+            self.current_path_compliant[c] = cur_delay <= (base_delay * self.info["betas"][c])
 
     # to begin we run our MST algo
     # next we iterate through the paths created by the MST and check for bandwidth delays
