@@ -210,11 +210,9 @@ class Solution:
                         # Update delays for clients impacted by node u
                         impacted_clients = list(self.node2downStream[u])
                         self.update_delays(impacted_clients)
-                        # Recalculate complaining clients in S
+                        # calculating again complaining clients in S
                         complaining_S = [c for c in self.S if not self.current_path_compliant[c]]
-                        if len(complaining_S) <= threshold_fcc:
-                            break
-                        if total_spent >= budget:
+                        if len(complaining_S) <= threshold_fcc or total_spent >= budget:
                             break
                     if len(complaining_S) <= threshold_fcc or total_spent >= budget:
                         break
@@ -228,25 +226,23 @@ class Solution:
             budget = self.lawsuit_amount  # Maximum we are willing to spend
             total_spent = 0
             while len(complaining_C) > threshold_lawsuit and total_spent < budget:
-                # complaining client in C, try to fix their delay
+                # try to fix their delay
                 for c in complaining_C:
                     path = self.paths[c]
                     
-                    nodes_to_consider = path[:-1]  # Exclude client node
+                    nodes_to_consider = path[:-1]  
                     nodes_to_consider = sorted(nodes_to_consider, key=lambda u: self.extra_path_delay(u), reverse=True)
                     for u in nodes_to_consider:
                         # decide whether to increase bandwidth at node u
                         self.info["bandwidths"][u] += 1
                         total_bandwidth_cost += self.cost_bandwidth
                         total_spent += self.cost_bandwidth
-                        # Update delays for clients impacted by node u
+                        # Update delays 
                         impacted_clients = list(self.node2downStream[u])
                         self.update_delays(impacted_clients)
-                        # Recalculate complaining clients in C
+                        # calcautking again complaining clients in C
                         complaining_C = [c for c in self.C if not self.current_path_compliant[c]]
-                        if len(complaining_C) <= threshold_lawsuit:
-                            break
-                        if total_spent >= budget:
+                        if len(complaining_C) <= threshold_lawsuit or total_spent >= budget:
                             break
                     if len(complaining_C) <= threshold_lawsuit or total_spent >= budget:
                         break
