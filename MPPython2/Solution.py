@@ -9,18 +9,33 @@ class Solution:
         self.graph = graph
         self.info = info
         self.node2downStream = [ set() for i in range(len(self.graph)) ]
-        self.current_path_acceptable = [-1]*len(self.graph)
+        self.m_extra_path_delay = [-1] * len(self.graph)
         # self.is_client = [False]*len(self.graph)
         # for c in self.info['list_clients']:
         #     self.is_client[c] = True
 
         # TUNE THIS MAGIC NUMBER [0,1]:
         # higher means faster; at 0 total algo time is O(n^3) at 1 its O(n^2)
-        # the lower this is, the more precisely the graph is formation is guided by score_path
+        # the lower this is, the more precisely the graph formation is guided by score_path
         self.top_x_percent = .8
 
-    def extra_path_delay(self,node): # O(1)
+    def extra_node_delay(self,node): # O(1)
         return len(self.node2downStream[node])//self.info["bandwidths"][node]
+
+    def extra_path_delay_r(self, path, i, refresh): # O(1) per new checked node
+        if i < 0: return 0
+
+        end_node = path[i]
+
+        if self.m_extra_path_delay[end_node] > 0 and not refresh: return self.m_extra_path_delay[end_node]
+
+        self.m_extra_path_delay[end_node] = max( self.extra_node_delay(end_node), self.extra_path_delay_r(path, i-1, refresh) )
+
+        return self.m_extra_path_delay[end_node]
+
+    def extra_path_delay(self, path, refresh): # O(1) per new checked node
+        if len(path) <= 1: return 0
+        return self.extra_path_delay_r(path, len(path)-2, refresh)
 
     # node2downStream must be populated before calling this method
     def dijkstras(self, grumps): # grumps are the nodes to return paths for
@@ -39,7 +54,7 @@ class Solution:
             else: visited[cur_node] = True
             
             for child in self.graph[cur_node]:
-                weight = 1+self.extra_path_delay(child)
+                weight = 1+self.extra_node_delay(child)
 
                 distance = cur_dist + weight
                 
@@ -62,29 +77,26 @@ class Solution:
         return grump_paths
 
     # This gives a heuristic score based on pmt, path_len, delay, and acceptability   O(n)
-    def score_current_path(self,path): # call only on client paths
+    def score_current_path(self,path): # call on new client paths
         node = path[len(path)-1]
 
-        base_delay = len(self.short_paths[node])-1
-        extra_delay = max([ self.extra_path_delay(path[i]) for i in range(len(path)-1) ])
-        cur_delay = base_delay+extra_delay
-        self.current_path_acceptable[node] = cur_delay <= (base_delay * self.info["alphas"][node])
+        money = self.info["payments"][node] * self.path_is_acceptable(path,refresh=True)
 
-        money = self.info["payments"][node] * self.current_path_acceptable[node]
+        base_delay = len(self.short_paths[node])-1
+        extra_delay = self.extra_path_delay(path,refresh=False)
+        cur_delay = base_delay + extra_delay
 
         return money/cur_delay
         
     # call only on client paths      O(n)
-    def check_path_acceptable(self,path):
+    def path_is_acceptable(self,path,refresh):
         node = path[len(path)-1]
 
-        if self.current_path_acceptable[node] >= 0:
-            return self.current_path_acceptable[node] # any new paths will already be cached during scoring
-
         base_delay = len(self.short_paths[node])-1
-        extra_delay = max([ self.extra_path_delay(path[i]) for i in range(len(path)-1) ])
+        extra_delay = self.extra_path_delay(path,refresh)
+        cur_delay = base_delay + extra_delay
 
-        return (base_delay+extra_delay) <= (base_delay * self.info["alphas"][node])
+        return cur_delay <= (base_delay * self.info["alphas"][node])
 
 
     # to begin we run our MST algo
@@ -123,8 +135,7 @@ class Solution:
             for c in self.info["list_clients"]:
                 if c not in paths: unhappy.append(c)
                 else:
-                    if c not in new_paths: self.current_path_acceptable[c] = -1 # mark old paths for rechecking delay
-                    if not self.check_path_acceptable(paths[c]): # O(n^2)
+                    if not self.path_is_acceptable(paths[c],refresh=(c not in new_paths)): # O(n^2)
                         unhappy.append(c)
                         # as we find unhappy clients, pull them from their current path
                         for upstream in paths[c]: # O(n^2)
