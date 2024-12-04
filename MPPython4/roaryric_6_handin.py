@@ -12,10 +12,20 @@ class Solution:
         self.node2downStream = [set() for _ in range(len(self.graph))]
         self.m_extra_path_delay = [-1] * len(self.graph)
         self.m_upgrade_for_path_delay_improvement = [(-1,-1)] * len(self.graph)
-        # self.cost_bandwidth = self.info["cost_bandwidth"]
+        self.current_path_compliant = [-1] * len(self.graph)  # For complaint threshold
+
+        # Ensure 'cost_bandwidth' is present
+        if "cost_bandwidth" not in self.info:
+            raise ValueError("Bandwidth increase cost 'cost_bandwidth' is missing from the input.")
+
+        # For Problem 3, we need to consider penalties and bandwidth costs
+        self.cost_bandwidth = self.info["cost_bandwidth"]
+        self.rho_lawsuit = self.info.get("rho1", 0)
+        self.rho_fcc = self.info.get("rho2", 0)
+        self.lawsuit_amount = self.info.get("lawsuit", 0)
+        self.fcc_fine = self.info.get("fcc_fine", 0)
+        self.S = [c for c in self.info["list_clients"] if self.info["is_fcc"][c]]
         self.C = self.info["list_clients"]
-        self.short_paths = None
-        self.unhappy = None
 
         # TUNE THIS MAGIC NUMBER [0,1]:
         self.top_x_percent = 0.8
@@ -106,29 +116,52 @@ class Solution:
 
         return money/cur_delay
 
+    # returns the delay that would have to be reduced for this node to stop complaining
+    def path_complaint_diff(self, path,refresh=False):
+        node = path[len(path)-1]
 
-    def add_band_for_complaints(self):     
-        complainers = self.unhappy
+        base_delay = len(self.short_paths[node])-1
+        extra_delay = self.extra_path_delay(path,refresh=refresh)
+        cur_delay = base_delay + extra_delay
 
-        while len(complainers):
+        return cur_delay - (base_delay * self.info["alphas"][node])
 
-            node_to_appease = complainers.pop()
 
-            extra_delay_thresh = (len(self.short_paths[node_to_appease])-1) * (self.info["alphas"][node_to_appease]-1)
-            extra_delay_thresh = int(extra_delay_thresh)
+    def add_band_for_complaints(self, fine_amount, thresh_beta):
+
+        complaint_thresh = int(thresh_beta * len(self.S)) # this might be under by 1??
+
+
+        band_budget = fine_amount/self.cost_bandwidth  # Maximum amount we are willing to spend in terms of bandwidth
+
+        no_upgrades = self.info["bandwidths"].copy()
+
+        # sort the complainers by how easy it is to keep them from complaining "complaint_diff"
+        complainers = [ c for c in self.C if self.current_path_compliant[c] and c in self.S ]
+        complainers = sorted( ( (self.path_complaint_diff(self.paths[node]),node) for node in complainers ), reverse=True)
+        while len(complainers) > complaint_thresh and band_budget > 0 :
+
+            _, node_to_appease = complainers.pop()
+
+            delay_thresh = (len(self.short_paths[node_to_appease])-1) * (self.info["betas"][node_to_appease]-1)
+            delay_thresh = ceil(delay_thresh)
 
             path = self.paths[node_to_appease]
-
-            for i in range(len(path)-1):
+            for i in range(len(path)-2):
                 upgrade_node = path[i]
                 extra_delay = self.extra_node_delay(upgrade_node)
-                delay_to_drop = extra_delay - extra_delay_thresh
+                delay_to_drop = extra_delay - delay_thresh
 
                 if delay_to_drop > 0:
                     # drop the delay all at once with multiplication
                     amnt_to_upgrade = len(self.node2downStream[upgrade_node]) % self.info["bandwidths"][upgrade_node]
                     amnt_to_upgrade += len(self.node2downStream[upgrade_node]) * (delay_to_drop-bool(amnt_to_upgrade))
                     self.info["bandwidths"][upgrade_node] += amnt_to_upgrade
+                    band_budget -= amnt_to_upgrade
+
+        # if we were unable to upgrade enough to avoid fine then dont upgrade at all
+        if len(complainers) > complaint_thresh:
+            self.info["bandwidths"] = no_upgrades
 
 
     # to begin we run our MST algo
@@ -142,7 +175,6 @@ class Solution:
         last_useful = False
         unhappy = self.info["list_clients"]
         last_unhappy_cnt = len(unhappy)+1
-        new_paths = None
 
         while len(unhappy) and (len(unhappy) < last_unhappy_cnt or last_useful): # exit loop if we got everyone or we cant get anymore
             last_unhappy_cnt = len(unhappy)
@@ -174,10 +206,8 @@ class Solution:
                         self.node2downStream[upstream].discard(c)
 
         # print(paths)
-        for grump in unhappy: # add in default paths for the shitters that didnt make the cut
-            paths[grump] = self.short_paths[grump]
-
-        self.unhappy = unhappy
+        for c in self.info["list_clients"]:
+            paths.setdefault(c,[self.isp,c]) # add in default paths for the shitters that didnt make the cut
 
         return paths  # output the final paths
 
@@ -189,24 +219,8 @@ class Solution:
         """
         self.paths = self.iterative_improved_paths()
 
-        # print(f"there are paths for:\n{sorted(self.graph.keys())}")
-
-        self.add_band_for_complaints()
-
-        # all_good = True
-        # for c in self.C:
-        #     path = self.paths[c]
-        #     extra_delay = self.extra_path_delay(path,True)
-        #     print(f"estimated extra delay for {c} is {extra_delay} ")
-        #     if not self.path_is_acceptable(path,refresh=False):
-        #         print(f"found an unacceptable path at {path[len(path)-1]}, \
-        #             pathlen is {len(path)}, shortest path len is {len(self.short_paths[path[len(path)-1]])}")
-        #         all_good = False
-        #         # exit()
-
-        # if all_good: print(f"all paths acceptable")
-
-        priorities = {c: -(len(self.short_paths[c])-1)*self.info["alphas"][c] for c in self.C }
+        self.add_band_for_complaints(self.fcc_fine, self.rho_fcc)
+        self.add_band_for_complaints(self.lawsuit_amount, self.rho_lawsuit)
 
         # For problems 3, 4, 5, return updated bandwidths
-        return self.paths, self.info["bandwidths"], priorities
+        return self.paths, self.info["bandwidths"], {}

@@ -131,14 +131,21 @@ class Solution:
 
         complaint_thresh = int(thresh_beta * len(self.S)) # this might be under by 1??
 
-        complainers = [ c for c in self.C if self.current_path_compliant[c] and c in self.S ]
-
         band_budget = fine_amount/self.cost_bandwidth  # Maximum amount we are willing to spend in terms of bandwidth
 
         no_upgrades = self.info["bandwidths"].copy()
 
         # sort the complainers by how easy it is to keep them from complaining "complaint_diff"
+        # complainers = []
+        # for node in self.S:
+        #     diff = self.path_complaint_diff(self.paths[node])
+        #     if diff > 0:
+        #         complainers.append((diff,node))
+
+        # complainers.sort(reverse=True)
+        complainers = [ c for c in self.C if self.current_path_compliant[c] and c in self.S ]
         complainers = sorted( ( (self.path_complaint_diff(self.paths[node]),node) for node in complainers ), reverse=True)
+
         while len(complainers) > complaint_thresh and band_budget > 0 :
 
             _, node_to_appease = complainers.pop()
@@ -147,7 +154,7 @@ class Solution:
             delay_thresh = int(delay_thresh)
 
             path = self.paths[node_to_appease]
-            for i in range(len(path)-2):
+            for i in range(len(path)-1):
                 upgrade_node = path[i]
                 extra_delay = self.extra_node_delay(upgrade_node)
                 delay_to_drop = extra_delay - delay_thresh
@@ -222,5 +229,7 @@ class Solution:
         self.add_band_for_complaints(self.fcc_fine, self.rho_fcc)
         self.add_band_for_complaints(self.lawsuit_amount, self.rho_lawsuit)
 
+        priorities = {c: -(len(self.short_paths[c])-1)*self.info["alphas"][c] for c in self.C }
+
         # For problems 3, 4, 5, return updated bandwidths
-        return self.paths, self.info["bandwidths"], {}
+        return self.paths, self.info["bandwidths"], priorities

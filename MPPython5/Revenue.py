@@ -6,6 +6,7 @@ class Revenue:
         """
         # list of complaining clients
         self.complaints = []
+        self.complainers = []
 
     def pen_0(self, client, optimal, alpha, pmt):
         """
@@ -66,7 +67,7 @@ class Revenue:
         return -cost
 
     def revenue(self, client_list, alphas, betas, optimal_dict, payments, lawsuit, rho_lawsuit, fcc_fine, rho_fcc, is_fcc,
-                pen_1, pen_2, updated_bandwidths, original_bandwidths, update_cost, problem):
+                pen_1, pen_2, updated_bandwidths, original_bandwidths, update_cost, problem,s=None):
         """
         determines overall revenue
          
@@ -95,8 +96,13 @@ class Revenue:
             curr_revenue = self.pen_0(
                 client, optimal_dict[client.id], alphas[client.id], payments[client.id])
             if problem == 5 and not curr_revenue:
-                # for problem 5 if a single client had their packet delayed, zero out the revenue
-                return 0
+                if s: # I assume Im failing here. Why?
+                    print(f"giving no revenue because client {client.id} has delay {client.delay} vs min delay of {optimal_dict[client.id]} with estimated extra delay of {s.extra_path_delay(client.path,True)} and requires {optimal_dict[client.id]*alphas[client.id]}")
+                    print(f"is path considered acceptable? {s.path_is_acceptable(client.path,True)}")
+                    print(f"is path considered acceptable? {s.path_is_acceptable(client.path,True)}")
+                    self.complainers.append(client.id)
+
+                return 0 # for problem 5 if a single client had their packet delayed, zero out the revenue
             rev += curr_revenue
 
             if (pen_1 or pen_2) and curr_revenue != 0:
