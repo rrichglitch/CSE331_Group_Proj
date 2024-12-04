@@ -12,7 +12,6 @@ class Solution:
         self.node2downStream = [set() for _ in range(len(self.graph))]
         self.m_extra_path_delay = [-1] * len(self.graph)
         self.m_upgrade_for_path_delay_improvement = [(-1,-1)] * len(self.graph)
-        self.current_path_compliant = [-1] * len(self.graph)  # For complaint threshold
 
         # Ensure 'cost_bandwidth' is present
         if "cost_bandwidth" not in self.info:
@@ -136,15 +135,12 @@ class Solution:
         no_upgrades = self.info["bandwidths"].copy()
 
         # sort the complainers by how easy it is to keep them from complaining "complaint_diff"
-        # complainers = []
-        # for node in self.S:
-        #     diff = self.path_complaint_diff(self.paths[node])
-        #     if diff > 0:
-        #         complainers.append((diff,node))
-
-        # complainers.sort(reverse=True)
-        complainers = [ c for c in self.C if self.current_path_compliant[c] and c in self.S ]
-        complainers = sorted( ( (self.path_complaint_diff(self.paths[node]),node) for node in complainers ), reverse=True)
+        complainers = []
+        for node in self.S:
+            diff = self.path_complaint_diff(self.paths[node],True)
+            if diff > 0:
+                complainers.append((diff,node))
+        complainers.sort(reverse=True)
 
         while len(complainers) > complaint_thresh and band_budget > 0 :
 
