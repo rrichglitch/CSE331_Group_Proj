@@ -12,7 +12,6 @@ class Solution:
         self.node2downStream = [set() for _ in range(len(self.graph))]
         self.m_extra_path_delay = [-1] * len(self.graph)
         self.m_upgrade_for_path_delay_improvement = [(-1,-1)] * len(self.graph)
-        self.current_path_compliant = [-1] * len(self.graph)  # For complaint threshold
 
         # Ensure 'cost_bandwidth' is present
         if "cost_bandwidth" not in self.info:
@@ -20,11 +19,6 @@ class Solution:
 
         # For Problem 3, we need to consider penalties and bandwidth costs
         self.cost_bandwidth = self.info["cost_bandwidth"]
-        self.rho_lawsuit = self.info.get("rho1", 0)
-        self.rho_fcc = self.info.get("rho2", 0)
-        self.lawsuit_amount = self.info.get("lawsuit", 0)
-        self.fcc_fine = self.info.get("fcc_fine", 0)
-        self.S = [c for c in self.info["list_clients"] if self.info["is_fcc"][c]]
         self.C = self.info["list_clients"]
 
         # TUNE THIS MAGIC NUMBER [0,1]:
@@ -116,35 +110,19 @@ class Solution:
 
         return money/cur_delay
 
-    # returns the delay that would have to be reduced for this node to stop complaining
-    def path_complaint_diff(self, path,refresh=False):
-        node = path[len(path)-1]
-
-        base_delay = len(self.short_paths[node])-1
-        extra_delay = self.extra_path_delay(path,refresh=refresh)
-        cur_delay = base_delay + extra_delay
-
-        return cur_delay - (base_delay * self.info["alphas"][node])
-
 
     def add_band_for_complaints(self, fine_amount, thresh_beta):
-
-        complaint_thresh = int(thresh_beta * len(self.S)) # this might be under by 1??
 
         complainers = [ c for c in self.C if self.current_path_compliant[c] and c in self.S ]
 
         band_budget = fine_amount/self.cost_bandwidth  # Maximum amount we are willing to spend in terms of bandwidth
 
-        no_upgrades = self.info["bandwidths"].copy()
-
-        # sort the complainers by how easy it is to keep them from complaining "complaint_diff"
-        complainers = sorted( ( (self.path_complaint_diff(self.paths[node]),node) for node in complainers ), reverse=True)
-        while len(complainers) > complaint_thresh and band_budget > 0 :
+        while len(complainers):
 
             _, node_to_appease = complainers.pop()
 
-            delay_thresh = (len(self.short_paths[node_to_appease])-1) * (self.info["betas"][node_to_appease]-1)
-            delay_thresh = ceil(delay_thresh)
+            delay_thresh = (len(self.short_paths[node_to_appease])-1) * (self.info["alphas"][node_to_appease]-1)
+            delay_thresh = int(delay_thresh)
 
             path = self.paths[node_to_appease]
             for i in range(len(path)-2):
@@ -158,10 +136,6 @@ class Solution:
                     amnt_to_upgrade += len(self.node2downStream[upgrade_node]) * (delay_to_drop-bool(amnt_to_upgrade))
                     self.info["bandwidths"][upgrade_node] += amnt_to_upgrade
                     band_budget -= amnt_to_upgrade
-
-        # if we were unable to upgrade enough to avoid fine then dont upgrade at all
-        if len(complainers) > complaint_thresh:
-            self.info["bandwidths"] = no_upgrades
 
 
     # to begin we run our MST algo
@@ -219,8 +193,7 @@ class Solution:
         """
         self.paths = self.iterative_improved_paths()
 
-        self.add_band_for_complaints(self.fcc_fine, self.rho_fcc)
-        self.add_band_for_complaints(self.lawsuit_amount, self.rho_lawsuit)
+        self.add_band_for_complaints()
 
         # For problems 3, 4, 5, return updated bandwidths
         return self.paths, self.info["bandwidths"], {}

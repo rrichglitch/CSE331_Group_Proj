@@ -144,7 +144,7 @@ class Solution:
             _, node_to_appease = complainers.pop()
 
             delay_thresh = (len(self.short_paths[node_to_appease])-1) * (self.info["betas"][node_to_appease]-1)
-            delay_thresh = ceil(delay_thresh)
+            delay_thresh = int(delay_thresh)
 
             path = self.paths[node_to_appease]
             for i in range(len(path)-2):
